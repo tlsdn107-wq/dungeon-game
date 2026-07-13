@@ -535,6 +535,7 @@
                 <button class="tc-btn" data-key="v">V<br>상점</button>
                 <button class="tc-btn" data-key="s">S<br>저장</button>
                 <button class="tc-btn" data-key="l">L<br>로드</button>
+                <button class="tc-btn" id="mute-btn">🔊<br>소리</button>
             </div>
         </div>
     </div>
@@ -601,7 +602,9 @@ let player = {
     equippedIndex: 0,
     armors: [{name:"천 옷", def:2}],
     equippedArmorIndex: 0,
-    skillGauge: 0
+    skillGauge: 0,
+    poisonTurns: 0,
+    poisonDmg: 0
 };
 
 let monsterTypes = [
@@ -839,6 +842,8 @@ function applySaveData(data) {
     }
     if (player.equippedArmorIndex === undefined || player.equippedArmorIndex === null) player.equippedArmorIndex = 0;
     if (player.skillGauge === undefined || player.skillGauge === null) player.skillGauge = 0;
+    if (player.poisonTurns === undefined || player.poisonTurns === null) player.poisonTurns = 0;
+    if (player.poisonDmg === undefined || player.poisonDmg === null) player.poisonDmg = 0;
     stage = data.stage;
     potions = data.potions;
     clearedFloors = new Set(data.clearedFloors || []);
@@ -955,6 +960,48 @@ function gateNeed() {
 
 function showMessage(msg) { message=msg; messageTimer=180; }
 
+// ---- 사운드 효과 (외부 음원 없이 Web Audio로 즉석 합성) ----
+let audioCtx = null;
+function getAudioCtx() {
+    if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch(e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
+let soundEnabled = true;
+function playTone(freq, duration, type, volume, sweepTo) {
+    if (!soundEnabled) return;
+    let actx = getAudioCtx();
+    if (!actx) return;
+    let osc = actx.createOscillator();
+    let gain = actx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, actx.currentTime);
+    if (sweepTo) osc.frequency.exponentialRampToValueAtTime(sweepTo, actx.currentTime + duration);
+    gain.gain.setValueAtTime(volume||0.15, actx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + duration);
+    osc.connect(gain); gain.connect(actx.destination);
+    osc.start(); osc.stop(actx.currentTime + duration);
+}
+function sfx(name) {
+    switch(name) {
+        case 'hit': playTone(220, 0.08, 'square', 0.12); break;
+        case 'crit': playTone(440, 0.12, 'sawtooth', 0.16, 220); break;
+        case 'skill': playTone(320, 0.28, 'sawtooth', 0.18, 900); break;
+        case 'hurt': playTone(140, 0.15, 'sawtooth', 0.15, 60); break;
+        case 'levelup': [523,659,784,1046].forEach((f,i)=>setTimeout(()=>playTone(f,0.15,'triangle',0.15),i*90)); break;
+        case 'item': playTone(700, 0.12, 'triangle', 0.13, 1100); break;
+        case 'potion': playTone(600, 0.14, 'sine', 0.14, 950); break;
+        case 'buy': playTone(500, 0.1, 'square', 0.1, 750); break;
+        case 'stairs': playTone(420, 0.18, 'sine', 0.12, 850); break;
+        case 'gameover': [280,230,180,130].forEach((f,i)=>setTimeout(()=>playTone(f,0.3,'sawtooth',0.15),i*180)); break;
+        case 'victory': [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>playTone(f,0.2,'triangle',0.18),i*120)); break;
+        case 'menu': playTone(380, 0.05, 'square', 0.07); break;
+    }
+}
+
 function getEquippedWeapon() {
     return player.weapons[player.equippedIndex] || {name:"맨손", atk:0};
 }
@@ -981,6 +1028,7 @@ function addWeapon(weapon, sourceMsg) {
     }
     player.weapons.push({name: weapon.name, atk: weapon.atk});
     showMessage(`${sourceMsg} ${weapon.name} 획득! (ATK+${weapon.atk}) - I키로 장착하세요`);
+    sfx('item');
 }
 
 function addArmor(armor, sourceMsg) {
@@ -993,6 +1041,7 @@ function addArmor(armor, sourceMsg) {
     }
     player.armors.push({name: armor.name, def: armor.def});
     showMessage(`${sourceMsg} ${armor.name} 획득! (DEF+${armor.def}) - I키로 장착하세요`);
+    sfx('item');
 }
 
 function getShopOffers() {
@@ -1013,6 +1062,7 @@ function buyShopOffer(offer) {
         return;
     }
     player.gold -= offer.cost;
+    sfx('buy');
     if (offer.type === 'potion') {
         potions++;
         showMessage(`🧪 물약 구매! (보유 ${potions}개)`);
@@ -1033,6 +1083,7 @@ function checkLevelUp() {
         player.atk += 5;
         player.def += 2;
         showMessage(`🎉 레벨 업! Lv.${player.level}`);
+        sfx('levelup');
     }
 }
 
@@ -1120,7 +1171,17 @@ function drawMap() {
     }
 }
 
-function drawHeroSprite(ctx, ox, oy, scale) {
+function equipTierColor(frac) {
+    if (frac < 0.15) return {c1:'#d5d8dc', c2:'#ffffff', glow:null};                          // 기본
+    if (frac < 0.35) return {c1:'#b8c4d0', c2:'#eef4fa', glow:null};                          // 강철(은)
+    if (frac < 0.55) return {c1:'#e8c34a', c2:'#fff3b0', glow:'rgba(255,215,0,0.55)'};        // 금
+    if (frac < 0.78) return {c1:'#4fc3f7', c2:'#c8f0ff', glow:'rgba(80,190,255,0.6)'};        // 마법(청)
+    return {c1:'#c084fc', c2:'#f0d9ff', glow:'rgba(190,100,255,0.75)'};                       // 전설(보라)
+}
+
+function drawHeroSprite(ctx, ox, oy, scale, weaponFrac, armorFrac) {
+    weaponFrac = weaponFrac || 0;
+    armorFrac = armorFrac || 0;
     ctx.save();
     ctx.translate(ox, oy);
     ctx.scale(scale, scale);
@@ -1146,16 +1207,24 @@ function drawHeroSprite(ctx, ox, oy, scale) {
     ctx.fillStyle='#c0392b'; ctx.fillRect(19,0,1,8);
     ctx.fillStyle='#2c3e50'; ctx.fillRect(11,9,4,2); ctx.fillRect(18,9,4,2);
     ctx.fillStyle='white'; ctx.fillRect(12,9,1,1); ctx.fillRect(19,9,1,1);
+    // 방패 - 방어구 등급에 따라 테두리/보석 색이 바뀜
+    let at = equipTierColor(armorFrac);
     ctx.fillStyle='#8e1a1a';
     ctx.beginPath(); ctx.moveTo(-2,14); ctx.lineTo(-2,26); ctx.lineTo(4,30); ctx.lineTo(10,26); ctx.lineTo(10,14); ctx.fill();
-    ctx.strokeStyle='#d4ac0d'; ctx.lineWidth=1;
+    ctx.strokeStyle=at.c1; ctx.lineWidth=1.3;
     ctx.beginPath(); ctx.moveTo(-2,14); ctx.lineTo(-2,26); ctx.lineTo(4,30); ctx.lineTo(10,26); ctx.lineTo(10,14); ctx.stroke();
-    ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(4,21,3,0,Math.PI*2); ctx.fill();
+    if (at.glow) { ctx.shadowColor = at.glow; ctx.shadowBlur = 5; }
+    ctx.fillStyle=at.c1; ctx.beginPath(); ctx.arc(4,21,3,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // 검 - 무기 등급에 따라 칼날 색/광채가 바뀜
+    let wt = equipTierColor(weaponFrac);
     ctx.fillStyle='#8b4513'; ctx.fillRect(26,20,4,8);
     ctx.fillStyle='#d4ac0d'; ctx.fillRect(23,19,10,3);
-    ctx.fillStyle='#d5d8dc'; ctx.fillRect(27,8,3,13);
-    ctx.fillStyle='white'; ctx.fillRect(27,8,1,13);
-    ctx.fillStyle='#d5d8dc'; ctx.beginPath(); ctx.moveTo(27,8); ctx.lineTo(30,8); ctx.lineTo(28,4); ctx.fill();
+    if (wt.glow) { ctx.shadowColor = wt.glow; ctx.shadowBlur = 7; }
+    ctx.fillStyle=wt.c1; ctx.fillRect(27,8,3,13);
+    ctx.fillStyle=wt.c2; ctx.fillRect(27,8,1,13);
+    ctx.fillStyle=wt.c1; ctx.beginPath(); ctx.moveTo(27,8); ctx.lineTo(30,8); ctx.lineTo(28,4); ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
 }
 
@@ -1165,7 +1234,11 @@ function drawPlayer() {
     grad.addColorStop(0,'rgba(255,150,50,0.15)');
     grad.addColorStop(1,'rgba(0,0,0,0)');
     cx.fillStyle=grad; cx.fillRect(0,0,cv.width,cv.height);
-    drawHeroSprite(cx, px, py, 1);
+    let maxWAtk = weaponTypes[weaponTypes.length-1].atk;
+    let maxADef = armorTypes[armorTypes.length-1].def;
+    let wFrac = Math.min(1, getEquippedWeapon().atk / maxWAtk);
+    let aFrac = Math.min(1, getEquippedArmor().def / maxADef);
+    drawHeroSprite(cx, px, py, 1, wFrac, aFrac);
 }
 
 function drawMonsterShape(ctx, name, mx, my, isBoss, bossColor, glowColor) {
@@ -1381,6 +1454,10 @@ function drawHUD() {
     cx.fillStyle='white'; cx.font='bold 10px Arial'; cx.textAlign='center';
     cx.fillText(`${player.hp}/${player.maxHp}`, 9+61, 18);
     cx.textAlign='left';
+    if (player.poisonTurns > 0) {
+        cx.font='11px Arial'; cx.fillStyle='#9ccc65';
+        cx.fillText(`🐍x${player.poisonTurns}`, 136, 19);
+    }
 
     cx.fillStyle='#ffd700'; cx.font='bold 13px Arial';
     cx.textAlign='center';
@@ -1588,6 +1665,15 @@ function draw() {
 
     drawHUD();
 
+    if (player.hp > 0 && !gameOver && !gameClear && player.hp / player.maxHp <= 0.2) {
+        let pulse = 0.28 + Math.sin(Date.now()*0.006)*0.22;
+        let vgrad = cx.createRadialGradient(cv.width/2, cv.height/2, cv.width*0.3, cv.width/2, cv.height/2, cv.width*0.75);
+        vgrad.addColorStop(0, 'rgba(200,0,0,0)');
+        vgrad.addColorStop(1, `rgba(200,0,0,${pulse})`);
+        cx.fillStyle = vgrad;
+        cx.fillRect(0,0,cv.width,cv.height);
+    }
+
     if (floorTransition > 0) {
         let progress = 1 - floorTransition/TRANSITION_FRAMES;
         let alpha = progress < 0.5 ? progress/0.5 : (1-progress)/0.5;
@@ -1596,27 +1682,55 @@ function draw() {
     }
 }
 
+const POISON_MONSTERS = ['독거미','스켈레톤','좀비','다크엘프'];
+
+function tickPlayerPoison() {
+    if (player.poisonTurns && player.poisonTurns > 0) {
+        player.poisonTurns--;
+        let pdmg = player.poisonDmg || 1;
+        player.hp = Math.max(0, player.hp - pdmg);
+        spawnDamageText(player.x, player.y, `-${pdmg}`, '#9ccc65');
+        if (player.hp<=0 && !gameOver) { gameOver = true; showMessage('☠️ 독에 중독되어 쓰러졌다...'); sfx('gameover'); }
+    }
+}
+
 function monsterHitsPlayer(monster) {
     let monDmg=Math.max(1,monster.atk-getTotalDef());
+    let heavy = monster.isBoss && Math.random() < 0.3;
+    if (heavy) monDmg = Math.floor(monDmg*1.8);
     if (defending) monDmg=Math.floor(monDmg/2);
     player.hp-=monDmg;
-    spawnDamageText(player.x, player.y, `-${monDmg}`, '#ff5252');
-    triggerShake(defending ? 3 : 6);
-    triggerFlash('rgba(255,0,0,0.22)');
-    if (player.hp<=0) { player.hp=0; gameOver=true; }
+    spawnDamageText(player.x, player.y, heavy ? `💢-${monDmg}` : `-${monDmg}`, heavy ? '#ff9d3a' : '#ff5252');
+    triggerShake(defending ? 3 : (heavy ? 9 : 6));
+    triggerFlash(heavy ? 'rgba(255,120,0,0.32)' : 'rgba(255,0,0,0.22)');
+    let poisoned = false;
+    if (!monster.isBoss && POISON_MONSTERS.includes(monster.name) && Math.random() < 0.3) {
+        player.poisonTurns = 3;
+        player.poisonDmg = Math.max(1, Math.floor(monster.atk*0.15));
+        poisoned = true;
+    }
+    if (player.hp<=0) { player.hp=0; gameOver=true; sfx('gameover'); }
+    else if (heavy) showMessage(`💢 ${monster.name}의 강공격! ${monDmg} 데미지!`);
+    else if (poisoned) showMessage(`🐍 ${monster.name}의 공격에 중독됐다! (${monDmg} 데미지)`);
     else showMessage(`💥 ${monster.name}의 공격! ${monDmg} 데미지!`);
+    sfx('hurt');
     defending=false;
 }
 
 function battle(monster, dmgMultiplier) {
     dmgMultiplier = dmgMultiplier || 1;
+    let isSkill = dmgMultiplier > 1;
+    let isCrit = !isSkill && Math.random() < 0.15;
+    if (isCrit) dmgMultiplier = 1.6;
     let dmg=Math.max(1,Math.floor(getTotalAtk()*dmgMultiplier)-monster.def);
     monster.hp-=dmg;
-    let isSkill = dmgMultiplier > 1;
-    spawnDamageText(monster.x, monster.y, isSkill ? `💥-${dmg}` : `-${dmg}`, isSkill ? '#7ee0ff' : '#fff176');
-    triggerFlash(isSkill ? 'rgba(120,220,255,0.18)' : 'rgba(255,255,255,0.10)');
-    if (isSkill) triggerShake(5);
-    else player.skillGauge = Math.min(100, (player.skillGauge||0) + 20);
+    let dmgText = isSkill ? `💥-${dmg}` : (isCrit ? `치명타!-${dmg}` : `-${dmg}`);
+    let dmgColor = isSkill ? '#7ee0ff' : (isCrit ? '#ff8a3a' : '#fff176');
+    spawnDamageText(monster.x, monster.y, dmgText, dmgColor);
+    triggerFlash(isSkill ? 'rgba(120,220,255,0.18)' : (isCrit ? 'rgba(255,160,60,0.18)' : 'rgba(255,255,255,0.10)'));
+    if (isSkill || isCrit) triggerShake(isSkill ? 5 : 4);
+    if (!isSkill) player.skillGauge = Math.min(100, (player.skillGauge||0) + 20);
+    sfx(isSkill ? 'skill' : (isCrit ? 'crit' : 'hit'));
     if (monster.hp<=0) {
         player.exp+=monster.exp;
         player.gold+=monster.gold;
@@ -1627,6 +1741,7 @@ function battle(monster, dmgMultiplier) {
             if (monster.final) {
                 gameClear = true;
                 showMessage(`🏆 ${monster.name} 처치! 던전을 정복했습니다!`);
+                sfx('victory');
             } else {
                 stairs = {x: monster.x, y: monster.y};
                 showMessage(`🎉 ${monster.name} 처치! 계단이 나타났습니다!`);
@@ -1728,6 +1843,7 @@ drawMiniMonster('ss-mon-skeleton', '스켈레톤', 1.6, 6, 4);
 })();
 
 function beginGame() {
+    getAudioCtx();
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('touch-controls').style.display = 'flex';
     gameStarted = true;
@@ -1834,7 +1950,7 @@ fitToScreen();
 function sendKey(key) {
     document.dispatchEvent(new KeyboardEvent('keydown', { key }));
 }
-document.querySelectorAll('#touch-controls .tc-btn').forEach(btn => {
+document.querySelectorAll('#touch-controls .tc-btn:not(#mute-btn)').forEach(btn => {
     let repeatTimer = null;
     const isDpad = btn.closest('#dpad') !== null;
     const fire = () => sendKey(btn.dataset.key);
@@ -1858,6 +1974,13 @@ document.querySelectorAll('#touch-controls .tc-btn').forEach(btn => {
     btn.addEventListener('pointerleave', stop);
     btn.addEventListener('pointercancel', stop);
     btn.addEventListener('contextmenu', e => e.preventDefault());
+});
+
+document.getElementById('mute-btn').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    soundEnabled = !soundEnabled;
+    document.getElementById('mute-btn').innerHTML = soundEnabled ? '🔊<br>소리' : '🔇<br>음소거';
+    if (soundEnabled) { getAudioCtx(); sfx('menu'); }
 });
 
 // ---- 이동: 게임 화면(캔버스)을 탭한 방향으로 한 칸 이동 ----
@@ -1918,6 +2041,11 @@ document.addEventListener('keydown', e => {
     }
 
     let nx=player.x, ny=player.y;
+    const turnKeys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','z','Z','a','A','x','X','c','C'];
+    if (turnKeys.includes(e.key)) {
+        tickPlayerPoison();
+        if (gameOver) { e.preventDefault(); return; }
+    }
     if (e.key==='ArrowUp') ny--;
     else if (e.key==='ArrowDown') ny++;
     else if (e.key==='ArrowLeft') nx--;
@@ -1933,8 +2061,9 @@ document.addEventListener('keydown', e => {
         else if ((player.skillGauge||0) < 100) { showMessage(`⚡ 스킬 게이지 부족! (${player.skillGauge||0}/100)`); }
         else {
             player.skillGauge = 0;
+            let skillMult = Math.min(3.2, 2.2 + player.level*0.05);
             showMessage(`💥 강타! ${target.name}에게 강력한 일격!`);
-            battle(target, 2.2);
+            battle(target, skillMult);
         }
         e.preventDefault(); return;
     } else if (e.key==='x'||e.key==='X') {
@@ -1946,6 +2075,7 @@ document.addEventListener('keydown', e => {
             player.hp=Math.min(player.maxHp,player.hp+30);
             potions--;
             showMessage(`🧪 물약 사용! HP +30 (남은 물약: ${potions}개)`);
+            sfx('potion');
         } else showMessage('물약이 없어요!');
         e.preventDefault(); return;
     } else if (e.key==='s'||e.key==='S') {
@@ -1999,6 +2129,7 @@ document.addEventListener('keydown', e => {
                 let need = gateNeed();
                 showMessage(`🔒 계단이 잠겨 있다! 몬스터 처치 ${floorKillCount}/${need}`);
             } else {
+            sfx('stairs');
             startFloorTransition(() => {
                 floorProgress[stage] = {killCount: floorKillCount, monsterTotal: floorMonsterTotal};
                 clearedFloors.add(stage);
@@ -2024,6 +2155,7 @@ document.addEventListener('keydown', e => {
             });
             }
         } else if (upstairs && player.x===upstairs.x && player.y===upstairs.y) {
+            sfx('stairs');
             startFloorTransition(() => {
                 floorProgress[stage] = {killCount: floorKillCount, monsterTotal: floorMonsterTotal};
                 stage--;
