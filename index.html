@@ -527,11 +527,12 @@
             </div>
             <div id="action-buttons">
                 <button class="tc-btn atk" data-key="z">Z 공격</button>
-                <button class="tc-btn skill" data-key="a">A 필살기</button>
+                <button class="tc-btn skill" data-key="a">A 스킬</button>
                 <button class="tc-btn def" data-key="x">X 방어</button>
                 <button class="tc-btn pot" data-key="c">C 물약</button>
             </div>
             <div id="menu-buttons">
+                <button class="tc-btn" data-key="k">K<br>트리</button>
                 <button class="tc-btn" data-key="i">I<br>인벤</button>
                 <button class="tc-btn" data-key="v">V<br>상점</button>
                 <button class="tc-btn" data-key="s">S<br>저장</button>
@@ -595,6 +596,25 @@ let dungeon = generateDungeon();
 let map = dungeon.map;
 let rooms = dungeon.rooms;
 
+// ---- 스킬 아이콘 (픽셀아트, base64 내장) ----
+const SKILL_ICON_SRC = {
+    fireball: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABBElEQVR4nO2WPQ6CQBCFBxNrOADBzkN4Bitjzz04APegN1ZeRkvCAaC2WKuN67g/MztLiIbXLUvyvvd2lgCwapVQTVWoRc3vh52SQGxSgNRlHt1ENEBTFaouczFEFAA2l0CwAVzmsRDiGdifniIIFgBOr81tEFSRAVzmrjW1hSTXUCISQCh96LkYwGtyPoogZj0CyhwEAbz3XqdHLXD0G0NoFU5taaEbJmj7MRMBtP2YdcP0vXG5+ddEzXYElPRkALOFx3X73tCpjfQf+wRFNeAy4ZqzAMizAPT6WQBYOG1MejYAbkGbmuac9AAA5BdN6c+r+YXUYBxzsVL8lieBWMz8L/QCBfN+EQVtZysAAAAASUVORK5CYII=",
+    icenova: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABTUlEQVR4nO1XMQ7CMAw8EBNzJ/gDj6h4RickxNB/8AMGhNSpz0BIPAYmZtYwGYxjJylBKghuStPYd3YdJwX+yERRVi7HfvguIb0IKMrKTebLrCx8bwYoegDIyULvGRjxBx7F5dAOLCMefSos308CLod2wJw7+S5EQDa0Tn6SyXyJ837n+XkSwIi0CO8OyZkGIpb2GrkqwBLBx+f9DnWz9ew2i5VHHEPnIrTIAaButmpmrOgBIPhdZbFJ8no6vo83p+tjzDIRIo8K4CJC5JYIIF68ag1wUD3wOY2c5rmIFCTVQCyKHLskAa+22RS7qACt61lplvMpZ0RQgDxwqLA0MmsXxER07vehPiDJpZ1WE6qAEDnB6oQSso9IEZ4Avu8lrINGW8P9hdaYi2NbSOuSr2xX7zju6iAXvd+IslCUlZutj+43b8Ufg6//NesdN6fY0ENSjQuVAAAAAElFTkSuQmCC",
+    meteor: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABHUlEQVR4nO2WsRHCMAxFJY4BqFPkctAwGRNQMQBVJsgMlAxDA5dLQZ0NTINDMJItGQWa/IrLAe/5x1YCMGdOENfu3C95i39LYAqMVYPhNcuQDYwzdRuDQAw0pUSygbHEFCIvgdNZdL+tJQagq4vhj3F/Rw5kvSmX1EVXFw6r5kMiBj+UK1L42PVRYfRA9gvPNji4B7flmvx91d2iIkkBL8HBOTAlQkm8DyKFiAYekyBXRomk4NtNCQAAl2unkiDnAFc5Fw8PP0uSPvd14WKr54CxJsYtJCehtg1txKOYC7XS1D4wFQiBGjgAMwm/lfCRnAyTBqhIT4Za4Nj16MdrTkRzwCLSfZF9xKxGcXYD2lshehjlxORxbJHcF5I5D12YsSrL0OsvAAAAAElFTkSuQmCC",
+    guard: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAx0lEQVR4nO2W0Q2DIBCGsekITET75AjKDJ2kQ/RBHYEn60TugE8aQjm4u9KYJvc9kXjwfxIPVEoQBOFkGuiBNtbXDluX4SPvmpvQtfdj3Lc3cuDo3sd4cnOy5kJetTIiIAL/IxC2VM16UGBdhibuXeyicd3k5uQhlBXgSlDCiwKQBJZSOEogJQHtQnz0lsLRAhgJTjhJIMUeSu2QEJRliDbWh7dkDOXtlWLsQO6jpIazBCAJTvjXaGP94/nyv/h7IkmcFi7UYAM5K2+T3h3H8wAAAABJRU5ErkJggg==",
+    ironwall: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABGUlEQVR4nGNgGAWjYBSMdMCILiApKfef1pY+f/4Ibi8LNgWGjh5w9r3LZ+BsJV0Toi3Bpe/8/h0o6rA6AJshMH5eRS1Byyd1NGPow+V4JoKm0RgMbgegBxsxwY9NHb60gzcNwDT7eHsSZTE2R2zZuh2vusEdBYPGAYSCkRJ9GA54/vwRI3phQY4jsKk/v38HSimI1QHUcASxluN0ACWOIMVyvA7A5whSAD7LGRiw1IbYgKSk3H/kCoqBgYHBx9sTpczPq6jF8D0hy4l2ADZHoFdUDAyYtR4hyxkYSCgHSIkOYi0nyQHEOoIUy0l2ALIj0CsYJV0Tki1nYCAhDaAD9DRBjuUUA0lJuf9eUWn/6dGOxOuIAbN8WAAAppecVdZYiV4AAAAASUVORK5CYII=",
+    invincible: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABFklEQVR4nO2Wuw2DMBCGjygjMIeHyARsEVnKAKRwlQIGQEJsQZs1mIM2NSmiQ+bixx0PISV8Eg0Y/9/ZhwXAwcHBv5O4buZZOmwVWLb9JPPsG2i0Yk34qDvRWMqJ9WZgwqKpnBNzWSSwBt4tsPFVWDRVcAxna1gCRqsxwA51iQAA3K83dl+wBFACJ3dJ4DN7LAdxDxitxiAabrQShc8SWBuxAH56lLmfo7MHPqdVN8SW094KX18gj7r7OgUBPEcxkmfpRAKrdzWbXT0V94VHBagEhoRWhh7NoXCWAJWQEAsHYDZh2faJtME44WwBKdxwkcCcVVhVgCshqV4sEJOQhi8iz9Lh9byM15a/cVGJXcJtid3Cf4I3FTaYT5iF/DQAAAAASUVORK5CYII=",
+    heal: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAgklEQVR4nGNgGAWjYKQDRnI0SXgp/Mcl92LbA5LMZCHHAQwMDAxijrIYYq/2PybZHCZyHUAtMOqAUQfgzDL4shq5AFsWxZsNsWU1GJid3owhljqzFqd6XFl0wKNg1AED7oABzwVk14a4KiNSa8MBj4JRB4w6gOwmGTnNr1EwCgYlAACx/B65iF5OlwAAAABJRU5ErkJggg==",
+    cureheal: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA/ElEQVR4nGNgGAWjYBQMMGAkVYOEl8J/bOIvtj0g2SwGBgYGFnI0iTnKovBf7X9MjjEMDAwMDExk66QSoLkDcEUZXRwg4aXwX9VpDV5HDHgU4E25hIKPEFB1WgNn394XgjWnEMwF6CmeWEBsziArGxJjuarTGoaetC9wsRKGNQwMDCH/0UOBZmkA2XJsfJo5AOZ7bABbjqBZIty4YgGGmH9EAkZCxJsGsKVaCS+F/9iKYmS1El4K/0tm8aCmgVk8WO2gSSKEOCbkPyThQQCubEizRPhi2wPG2/tC8FpOUwcQC2gSBTAAiwp8bQWyHEBK/U9uQ2UUjIJRQDcAAMU5XuieWPipAAAAAElFTkSuQmCC",
+    regen: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8UlEQVR4nO2UsQ2DMBBFP1FmiNJEyh5UacMOTJExmIIqC0BLxR5INBZLkCJx5DgHvvMlovErLVn//eMwkEgoOV7Ps+b+Tht+uJxUEtECNhwANBJRAm64JVZCLOCHl0WOssijJUQCVHMfqQRbgBMOPCcikci04Xb8PnXTY+pGmHZYzdhrwpeCLa9785qE6h3w27vhXIICph2yqRuDgVQ45xOwJ2DD3d/uF7AETDtk1e3+0TIkwWnPFnCRSHCIWsK66aMWTiXgLqMrQsEdv0jgX4gEqCn4SNoDjJdwKeRNQZwJEAt8taswk+dMNt+BRCKxOQ8qvXfi6yF9PgAAAABJRU5ErkJggg==",
+};
+const skillIconImg = {};
+Object.keys(SKILL_ICON_SRC).forEach(k => {
+    let im = new Image();
+    im.src = SKILL_ICON_SRC[k];
+    skillIconImg[k] = im;
+});
+
 let player = {
     x: Math.floor(rooms[0].x+rooms[0].w/2),
     y: Math.floor(rooms[0].y+rooms[0].h/2),
@@ -604,9 +624,34 @@ let player = {
     armors: [{name:"천 옷", def:2}],
     equippedArmorIndex: 0,
     skillGauge: 0,
+    sp: 0,
+    learnedSkills: [],
+    skillCooldowns: {},
+    defBuffTurns: 0,
+    defBuffMult: 0,
+    invincibleTurns: 0,
+    regenTurns: 0,
+    regenAmt: 0,
     poisonTurns: 0,
     poisonDmg: 0
 };
+
+// ---- 스킬트리 정의: 공격/방어/회복 3트랙 x 3티어 ----
+const SKILL_DEFS = {
+    fireball:   {id:'fireball',   track:'atk',  tier:1, name:'파이어볼',   desc:'마법공격 200% 데미지',   spCost:1, minLv:3,  cooldown:6,  icon:'fireball',  emoji:'🔥', requires:null},
+    iceNova:    {id:'iceNova',    track:'atk',  tier:2, name:'아이스노바', desc:'공격 + 2턴 둔화',        spCost:2, minLv:7,  cooldown:8,  icon:'icenova',   emoji:'❄️', requires:'fireball'},
+    meteor:     {id:'meteor',     track:'atk',  tier:3, name:'메테오',     desc:'주변 몬스터 광역 공격',   spCost:3, minLv:12, cooldown:16, icon:'meteor',    emoji:'☄️', requires:'iceNova'},
+
+    guard:      {id:'guard',      track:'def',  tier:1, name:'방어강화',   desc:'DEF +50% (3턴)',        spCost:1, minLv:3,  cooldown:10, icon:'guard',     emoji:'🛡️', requires:null},
+    ironWall:   {id:'ironWall',   track:'def',  tier:2, name:'철벽방어',   desc:'DEF +80% (5턴)',        spCost:2, minLv:7,  cooldown:14, icon:'ironwall',  emoji:'💪', requires:'guard'},
+    invincible: {id:'invincible', track:'def',  tier:3, name:'무적방패',   desc:'2턴간 무적',             spCost:3, minLv:12, cooldown:20, icon:'invincible',emoji:'🌟', requires:'ironWall'},
+
+    heal:       {id:'heal',       track:'heal', tier:1, name:'기초 치유', desc:'HP 25% 회복',           spCost:1, minLv:3,  cooldown:12, icon:'heal',      emoji:'✨', requires:null},
+    cureHeal:   {id:'cureHeal',   track:'heal', tier:2, name:'회복술',    desc:'HP 40% 회복 + 중독치료', spCost:2, minLv:7,  cooldown:14, icon:'cureheal',  emoji:'💚', requires:'heal'},
+    regen:      {id:'regen',      track:'heal', tier:3, name:'재생술',    desc:'5턴간 매턴 HP 10%',      spCost:3, minLv:12, cooldown:18, icon:'regen',     emoji:'💫', requires:'cureHeal'},
+};
+// 스킬트리 UI에서 열-우선(트랙별 3개씩) 순서로 순회하기 위한 목록
+const SKILL_LIST = ['fireball','iceNova','meteor','guard','ironWall','invincible','heal','cureHeal','regen'];
 
 let monsterTypes = [
     {name:"슬라임",   hp:20,  atk:4,  def:0,  exp:8,  gold:3,  minS:1,  maxS:4},
@@ -845,6 +890,16 @@ function applySaveData(data) {
     if (player.skillGauge === undefined || player.skillGauge === null) player.skillGauge = 0;
     if (player.poisonTurns === undefined || player.poisonTurns === null) player.poisonTurns = 0;
     if (player.poisonDmg === undefined || player.poisonDmg === null) player.poisonDmg = 0;
+    if (player.sp === undefined || player.sp === null) player.sp = 0;
+    if (!player.learnedSkills) player.learnedSkills = [];
+    if (player.defBuffTurns === undefined || player.defBuffTurns === null) player.defBuffTurns = 0;
+    if (player.defBuffMult === undefined || player.defBuffMult === null) player.defBuffMult = 0;
+    if (player.invincibleTurns === undefined || player.invincibleTurns === null) player.invincibleTurns = 0;
+    if (player.regenTurns === undefined || player.regenTurns === null) player.regenTurns = 0;
+    if (player.regenAmt === undefined || player.regenAmt === null) player.regenAmt = 0;
+    // 쿨타임은 turnCount(세션 카운터) 기준이라 불러오기 시 초기화
+    player.skillCooldowns = {};
+    turnCount = 0;
     stage = data.stage;
     potions = data.potions;
     clearedFloors = new Set(data.clearedFloors || []);
@@ -898,6 +953,9 @@ let gameStarted=false;
 let heroName='';
 let invOpen=false, invSelect=0, invCategory='weapon';
 let shopOpen=false, shopSelect=0;
+let skillMenuOpen=false, skillMenuSelect=0;
+let skillTreeOpen=false, skillTreeSelect=0;
+let turnCount=0;
 let respawnTimer = 0;
 const RESPAWN_INTERVAL = 340; // 약 5.5초마다 리스폰
 const GATE_RATIO = 0.85; // 계단이 열리기 위해 처치해야 하는 초기 몬스터 비율
@@ -1130,7 +1188,12 @@ function checkLevelUp() {
         player.hp = player.maxHp;
         player.atk += 5;
         player.def += 2;
-        showMessage(`🎉 레벨 업! Lv.${player.level}`);
+        if (player.level >= 3) {
+            player.sp = (player.sp||0) + 1;
+            showMessage(`🎉 레벨 업! Lv.${player.level} (SP +1, K로 스킬트리 확인)`);
+        } else {
+            showMessage(`🎉 레벨 업! Lv.${player.level}`);
+        }
         sfx('levelup');
     }
 }
@@ -1625,25 +1688,46 @@ function drawHUD() {
         cx.textAlign='left';
         messageTimer--;
     }
-    // 스킬 게이지 바
-    let sg = player.skillGauge||0, sgPct = sg/100;
-    drawRoundedRect(10, cv.height-46, 100, 6, 3);
-    cx.fillStyle='#222'; cx.fill();
-    drawRoundedRect(10, cv.height-46, 100*sgPct, 6, 3);
-    cx.fillStyle = sgPct>=1 ? '#7ee0ff' : '#4a6fa5'; cx.fill();
-    cx.font='9px Arial'; cx.textAlign='left';
-    cx.fillStyle = sgPct>=1 ? '#7ee0ff' : '#888';
-    cx.fillText(sgPct>=1 ? 'A:필살기 준비!' : `SKILL ${sg}/100`, 116, cv.height-41);
-    cx.fillStyle='#aaa'; cx.font='11px Arial';
+    // 스킬 아이콘 바: 배운 스킬 아이콘 + 쿨타임을 표시 (Lv3 이전엔 SP/스킬 자체가 없음)
+    let iconY = cv.height-70;
+    if (player.level >= 3 || (player.learnedSkills||[]).length > 0) {
+        cx.font='9px Arial'; cx.textAlign='left'; cx.fillStyle='#ffd700';
+        cx.fillText(`SP ${player.sp||0}  (A:스킬사용 K:스킬트리)`, 10, iconY-2);
+    }
+    (player.learnedSkills||[]).forEach((id, i) => {
+        let def = SKILL_DEFS[id];
+        let ix = 10 + i*26;
+        let last = player.skillCooldowns[id];
+        let remain = last !== undefined ? Math.max(0, def.cooldown - (turnCount - last)) : 0;
+        drawRoundedRect(ix, iconY, 22, 22, 4);
+        cx.fillStyle = remain>0 ? 'rgba(40,40,40,0.9)' : 'rgba(30,50,70,0.9)';
+        cx.fill();
+        cx.strokeStyle = remain>0 ? '#444' : '#4ac8ff'; cx.lineWidth=1; cx.stroke();
+        let img = skillIconImg[def.icon];
+        if (img && img.complete) {
+            cx.save();
+            if (remain>0) cx.globalAlpha = 0.35;
+            cx.drawImage(img, ix+2, iconY+2, 18, 18);
+            cx.restore();
+        }
+        if (remain>0) {
+            cx.fillStyle='#fff'; cx.font='bold 10px Arial'; cx.textAlign='center';
+            cx.fillText(remain, ix+11, iconY+15);
+            cx.textAlign='left';
+        }
+    });
+    cx.fillStyle='#aaa'; cx.font='11px Arial'; cx.textAlign='left';
     cx.fillText(`⚔️ ATK ${getTotalAtk()}(${getEquippedWeapon().name})   🛡️ DEF ${getTotalDef()}(${getEquippedArmor().name})   🧪 ${potions}개`,10,cv.height-24);
     cx.fillStyle='#7dcea0'; cx.textAlign='right';
     cx.fillText(`EXP ${player.exp}`,cv.width-10,cv.height-24);
     cx.fillStyle='#888'; cx.textAlign='center'; cx.font='10px Arial';
-    cx.fillText(`Z:공격 A:필살기 X:방어 C:물약 I:인벤 V:상점 S:저장 L:불러오기`, cv.width/2, cv.height-6);
+    cx.fillText(`Z:공격 A:스킬 X:방어 C:물약 K:트리 I:인벤 V:상점 S:저장 L:불러오기`, cv.width/2, cv.height-6);
     cx.textAlign='left';
 
     if (invOpen) drawInventory();
     if (shopOpen) drawShop();
+    if (skillMenuOpen) drawSkillMenu();
+    if (skillTreeOpen) drawSkillTree();
 
     if (gameOver) {
         cx.fillStyle='rgba(0,0,0,0.82)'; cx.fillRect(0,0,cv.width,cv.height);
@@ -1727,6 +1811,95 @@ function drawShop() {
         cx.textAlign = 'right';
         cx.fillText(`${o.cost}G`, cv.width-46, y);
         cx.textAlign = 'left';
+    });
+}
+
+// ---- 스킬 사용 메뉴: 배운 스킬 중 하나를 골라 즉시 사용 ----
+function drawSkillMenu() {
+    cx.fillStyle = 'rgba(0,0,0,0.88)';
+    cx.fillRect(30, 45, cv.width-60, cv.height-100);
+    cx.strokeStyle = '#4ac8ff';
+    cx.lineWidth = 2;
+    cx.strokeRect(30, 45, cv.width-60, cv.height-100);
+    cx.fillStyle = '#4ac8ff';
+    cx.font = 'bold 15px Arial';
+    cx.textAlign = 'center';
+    cx.fillText('✨ 스킬 사용', cv.width/2, 68);
+    cx.font = '11px Arial'; cx.fillStyle='#aaa';
+    cx.fillText('↑↓ 선택   Z 사용   A/Esc 닫기', cv.width/2, 84);
+    cx.textAlign = 'left';
+    cx.font = '13px Arial';
+    (player.learnedSkills||[]).forEach((id, i) => {
+        let def = SKILL_DEFS[id];
+        let y = 108 + i*40;
+        let selected = i === skillMenuSelect;
+        let last = player.skillCooldowns[id];
+        let remain = last !== undefined ? Math.max(0, def.cooldown - (turnCount - last)) : 0;
+        if (selected) { cx.fillStyle = 'rgba(74,200,255,0.25)'; cx.fillRect(46, y-24, cv.width-92, 34); }
+        let img = skillIconImg[def.icon];
+        if (img && img.complete) cx.drawImage(img, 50, y-20, 26, 26);
+        cx.font = '13px Arial';
+        cx.fillStyle = remain>0 ? '#777' : 'white';
+        cx.fillText(`${def.name}  ${def.desc}`, 84, y-4);
+        cx.font='10px Arial';
+        cx.fillStyle = remain>0 ? '#ff8888' : '#7dcea0';
+        cx.fillText(remain>0 ? `쿨타임 ${remain}턴 남음` : '사용 가능', 84, y+10);
+    });
+}
+
+// ---- 스킬트리 패널: 공격/방어/회복 3트랙 x 3티어 습득 화면 ----
+function drawSkillTree() {
+    cx.fillStyle = 'rgba(0,0,0,0.92)';
+    cx.fillRect(20, 40, cv.width-40, cv.height-90);
+    cx.strokeStyle = '#ffd700';
+    cx.lineWidth = 2;
+    cx.strokeRect(20, 40, cv.width-40, cv.height-90);
+    cx.fillStyle = '#ffd700';
+    cx.font = 'bold 14px Arial';
+    cx.textAlign = 'center';
+    cx.fillText(`🌳 스킬트리   SP ${player.sp||0}`, cv.width/2, 62);
+    cx.font = '10px Arial'; cx.fillStyle='#aaa';
+    cx.fillText('←→↑↓ 선택   Z 습득   K/Esc 닫기', cv.width/2, 78);
+    cx.textAlign = 'left';
+
+    const tracks = ['atk','def','heal'];
+    const trackNames = {atk:'⚔️ 공격', def:'🛡️ 방어', heal:'💚 회복'};
+    const colW = (cv.width-60)/3;
+    tracks.forEach((tr, ci) => {
+        let colCx = 30 + ci*colW + colW/2;
+        cx.fillStyle='#ccc'; cx.font='11px Arial'; cx.textAlign='center';
+        cx.fillText(trackNames[tr], colCx, 96);
+        cx.textAlign='left';
+        for (let tier=1; tier<=3; tier++) {
+            let id = SKILL_LIST.find(k => SKILL_DEFS[k].track===tr && SKILL_DEFS[k].tier===tier);
+            let def = SKILL_DEFS[id];
+            let y = 106 + (tier-1)*70;
+            let boxX = 30 + ci*colW + 6;
+            let boxW = colW - 12;
+            let learned = (player.learnedSkills||[]).includes(id);
+            let selected = id === SKILL_LIST[skillTreeSelect];
+            let locked = player.level < def.minLv || (def.requires && !(player.learnedSkills||[]).includes(def.requires));
+            drawRoundedRect(boxX, y, boxW, 60, 6);
+            cx.fillStyle = learned ? 'rgba(74,200,255,0.25)' : (locked ? 'rgba(60,60,60,0.5)' : 'rgba(255,215,0,0.12)');
+            cx.fill();
+            cx.strokeStyle = selected ? '#fff' : (learned ? '#4ac8ff' : '#555');
+            cx.lineWidth = selected ? 2 : 1;
+            cx.stroke();
+            let img = skillIconImg[def.icon];
+            if (img && img.complete) {
+                cx.save();
+                if (locked) cx.globalAlpha = 0.35;
+                cx.drawImage(img, boxX+6, y+6, 22, 22);
+                cx.restore();
+            }
+            cx.font='10px Arial'; cx.textAlign='left';
+            cx.fillStyle = locked ? '#777' : (learned ? '#7ee0ff' : '#fff');
+            cx.fillText(def.name, boxX+32, y+16);
+            cx.font='8px Arial'; cx.fillStyle='#999';
+            cx.fillText(def.desc, boxX+6, y+42);
+            cx.fillStyle = learned ? '#7dcea0' : '#ffd700';
+            cx.fillText(learned ? '✅ 습득완료' : `Lv${def.minLv}+ · SP${def.spCost}`, boxX+6, y+54);
+        }
     });
 }
 
@@ -1830,6 +2003,27 @@ function tickPlayerPoison() {
     }
 }
 
+// 방어 버프 / 무적 / 재생 지속시간을 매 턴 감소시키고 재생 효과 적용
+function tickPlayerBuffs() {
+    if (player.regenTurns && player.regenTurns > 0) {
+        player.regenTurns--;
+        let amt = player.regenAmt || 0;
+        if (amt > 0 && player.hp > 0) {
+            player.hp = Math.min(player.maxHp, player.hp + amt);
+            spawnDamageText(player.x, player.y, `+${amt}`, '#9cf29c');
+        }
+    }
+    if (player.defBuffTurns && player.defBuffTurns > 0) player.defBuffTurns--;
+    if (player.invincibleTurns && player.invincibleTurns > 0) player.invincibleTurns--;
+}
+
+// 플레이어가 행동(이동/공격/방어/물약/스킬)을 할 때마다 한 턴으로 취급
+function playerTurnTick() {
+    turnCount++;
+    tickPlayerPoison();
+    tickPlayerBuffs();
+}
+
 function monsterHitsPlayer(monster) {
     let heavy = false;
     if (monster.isBoss) {
@@ -1850,8 +2044,11 @@ function monsterHitsPlayer(monster) {
     let monDmg=Math.max(1,monster.atk-getTotalDef());
     if (heavy) monDmg = Math.floor(monDmg*2.1);
     if (defending) monDmg=Math.floor(monDmg/2);
+    if (player.defBuffTurns > 0) monDmg = Math.max(1, Math.floor(monDmg*(1-player.defBuffMult)));
+    let invincible = player.invincibleTurns > 0;
+    if (invincible) monDmg = 0;
     player.hp-=monDmg;
-    spawnDamageText(player.x, player.y, heavy ? `💢-${monDmg}` : `-${monDmg}`, heavy ? '#ff9d3a' : '#ff5252');
+    spawnDamageText(player.x, player.y, invincible ? '🌟무적!' : (heavy ? `💢-${monDmg}` : `-${monDmg}`), invincible ? '#ffe066' : (heavy ? '#ff9d3a' : '#ff5252'));
     triggerShake(defending ? 3 : (heavy ? 12 : 6));
     triggerFlash(heavy ? 'rgba(255,80,0,0.4)' : 'rgba(255,0,0,0.22)');
     if (heavy) {
@@ -1862,17 +2059,133 @@ function monsterHitsPlayer(monster) {
         spawnBurst(player.x, player.y, '#ffae42', 18);
     }
     let poisoned = false;
-    if (!monster.isBoss && POISON_MONSTERS.includes(monster.name) && Math.random() < 0.3) {
+    if (!invincible && !monster.isBoss && POISON_MONSTERS.includes(monster.name) && Math.random() < 0.3) {
         player.poisonTurns = 3;
         player.poisonDmg = Math.max(1, Math.floor(monster.atk*0.15));
         poisoned = true;
     }
     if (player.hp<=0) { player.hp=0; gameOver=true; sfx('gameover'); }
+    else if (invincible) showMessage(`🌟 무적 상태! ${monster.name}의 공격이 무효화됐다!`);
     else if (heavy) showMessage(`💢 ${monster.name}의 강공격 작렬! ${monDmg} 데미지!`);
     else if (poisoned) showMessage(`🐍 ${monster.name}의 공격에 중독됐다! (${monDmg} 데미지)`);
     else showMessage(`💥 ${monster.name}의 공격! ${monDmg} 데미지!`);
     sfx('hurt');
     defending=false;
+}
+
+// ---- 스킬 습득 (스킬트리에서 SP 소모) ----
+function learnSkill(id) {
+    let def = SKILL_DEFS[id];
+    if (!def) return;
+    if (player.learnedSkills.includes(id)) { showMessage(`이미 배운 스킬이에요: ${def.name}`); return; }
+    if (player.level < def.minLv) { showMessage(`⚡ Lv${def.minLv}부터 배울 수 있어요! (${def.name})`); return; }
+    if (def.requires && !player.learnedSkills.includes(def.requires)) {
+        showMessage(`⚡ 먼저 ${SKILL_DEFS[def.requires].name}을(를) 배워야 해요!`);
+        return;
+    }
+    if ((player.sp||0) < def.spCost) { showMessage(`⚡ SP가 부족해요! (필요 SP ${def.spCost})`); return; }
+    player.sp -= def.spCost;
+    player.learnedSkills.push(id);
+    showMessage(`${def.emoji} ${def.name} 습득!`);
+    sfx('levelup');
+}
+
+// ---- 스킬 사용 (쿨타임 체크 후 효과 적용) ----
+function useSkill(id) {
+    let def = SKILL_DEFS[id];
+    if (!def) return;
+    let last = player.skillCooldowns[id];
+    let remain = last !== undefined ? def.cooldown - (turnCount - last) : 0;
+    if (remain > 0) { showMessage(`⏳ ${def.name} 쿨타임 ${remain}턴 남음`); return; }
+
+    if (def.track === 'atk') {
+        let targets;
+        if (def.id === 'meteor') {
+            targets = monsters.filter(m => Math.abs(m.x-player.x)<=2 && Math.abs(m.y-player.y)<=2);
+        } else {
+            let t = monsters.find(m => Math.abs(m.x-player.x)<=1 && Math.abs(m.y-player.y)<=1);
+            targets = t ? [t] : [];
+        }
+        if (targets.length === 0) { showMessage('근처에 몬스터가 없어요!'); return; }
+        skillMenuOpen = false;
+        playerTurnTick();
+        if (gameOver) return;
+        player.skillCooldowns[id] = turnCount;
+        let mult = def.id === 'fireball' ? 2.0 : def.id === 'iceNova' ? 2.4 : 1.6; // 메테오는 다수 타격이라 배율을 낮춤
+        showMessage(`${def.emoji} ${def.name}!`);
+        targets.slice().forEach(t => {
+            if (monsters.includes(t)) {
+                if (def.id === 'iceNova') t.stunTurns = (t.stunTurns||0) + 2;
+                skillDamage(t, mult, def);
+            }
+        });
+    } else if (def.track === 'def') {
+        skillMenuOpen = false;
+        playerTurnTick();
+        if (gameOver) return;
+        player.skillCooldowns[id] = turnCount;
+        if (def.id === 'guard') { player.defBuffTurns = 3; player.defBuffMult = 0.5; }
+        else if (def.id === 'ironWall') { player.defBuffTurns = 5; player.defBuffMult = 0.8; }
+        else if (def.id === 'invincible') { player.invincibleTurns = 2; }
+        showMessage(`${def.emoji} ${def.name} 발동!`);
+        sfx('buy');
+    } else if (def.track === 'heal') {
+        skillMenuOpen = false;
+        playerTurnTick();
+        if (gameOver) return;
+        player.skillCooldowns[id] = turnCount;
+        let pct = def.id === 'heal' ? 0.25 : def.id === 'cureHeal' ? 0.40 : 0;
+        if (pct > 0) {
+            let amt = Math.floor(player.maxHp*pct);
+            player.hp = Math.min(player.maxHp, player.hp+amt);
+            spawnDamageText(player.x, player.y, `+${amt}`, '#9cf29c');
+        }
+        if (def.id === 'cureHeal') { player.poisonTurns = 0; }
+        if (def.id === 'regen') { player.regenTurns = 5; player.regenAmt = Math.max(1, Math.floor(player.maxHp*0.10)); }
+        showMessage(`${def.emoji} ${def.name} 사용!`);
+        sfx('potion');
+    }
+}
+
+// 스킬 공격 데미지 처리 (battle()과 별개: 게이지 소모 없이 즉시 마법 데미지)
+function skillDamage(monster, mult, def) {
+    let dmg = Math.max(1, Math.floor(getTotalAtk()*mult) - monster.def);
+    monster.hp -= dmg;
+    spawnDamageText(monster.x, monster.y, `${def.emoji}-${dmg}`, '#7ee0ff');
+    spawnImpactRing(monster.x, monster.y, '#7ee0ff', 30, 18);
+    spawnBurst(monster.x, monster.y, '#7ee0ff', 10);
+    triggerShake(6);
+    sfx('skill');
+    if (monster.hp <= 0) {
+        player.exp += monster.exp;
+        player.gold += monster.gold;
+        monsters = monsters.filter(m => m !== monster);
+        if (monster.isBoss) {
+            clearedFloors.add(stage);
+            triggerShake(6);
+            if (monster.final) {
+                gameClear = true;
+                showMessage(`🏆 ${monster.name} 처치! 던전을 정복했습니다!`);
+                sfx('victory');
+            } else {
+                stairs = {x: monster.x, y: monster.y};
+                showMessage(`🎉 ${monster.name} 처치! 계단이 나타났습니다!`);
+            }
+            return;
+        }
+        showMessage(`✨ ${monster.name} 처치! +${monster.exp}EXP +${monster.gold}G`);
+        checkLevelUp();
+        floorKillCount++;
+        if (Math.random() < 0.05) {
+            if (Math.random() < 0.5) {
+                let pool = weaponTypes.filter(w => stage >= w.minS && stage <= w.maxS);
+                if (pool.length > 0) addWeapon(pool[Math.floor(Math.random()*pool.length)], '⚔️ 몬스터가 무기를 떨어뜨렸다!');
+            } else {
+                let pool = armorTypes.filter(a => stage >= a.minS && stage <= a.maxS);
+                if (pool.length > 0) addArmor(pool[Math.floor(Math.random()*pool.length)], '🛡️ 몬스터가 방어구를 떨어뜨렸다!');
+            }
+        }
+    }
 }
 
 function battle(monster, dmgMultiplier) {
@@ -1939,8 +2252,18 @@ const MONSTER_CHASE_RADIUS = 6;
 let monsterMoveTimer = 0;
 const MONSTER_MOVE_INTERVAL = 26;
 
+// 인벤/상점/스킬트리/스킬메뉴 중 하나라도 열려있는지 확인 (열려있는 동안 몬스터는 정지)
+function anyMenuOpen() {
+    return invOpen || shopOpen || skillTreeOpen || skillMenuOpen;
+}
+// 메뉴를 닫을 때 몬스터 행동 타이머를 초기화해서, 닫자마자 바로 공격당하지 않도록 유예시간을 준다
+function grantMenuCloseGrace() {
+    monsterMoveTimer = 0;
+}
+
 function updateMonsterAI() {
     monsters.forEach(m => {
+        if (m.stunTurns && m.stunTurns > 0) { m.stunTurns--; return; } // 아이스노바 둔화: 이번 행동을 건너뜀
         let dx = player.x - m.x, dy = player.y - m.y;
         let dist = Math.sqrt(dx*dx + dy*dy);
         let nx = m.x, ny = m.y;
@@ -2191,6 +2514,7 @@ document.addEventListener('keydown', e => {
             }
         } else if (e.key==='i'||e.key==='I'||e.key==='Escape') {
             invOpen = false;
+            grantMenuCloseGrace();
         }
         e.preventDefault();
         return;
@@ -2204,15 +2528,54 @@ document.addEventListener('keydown', e => {
             buyShopOffer(offers[shopSelect]);
         } else if (e.key==='v'||e.key==='V'||e.key==='Escape') {
             shopOpen = false;
+            grantMenuCloseGrace();
+        }
+        e.preventDefault();
+        return;
+    }
+
+    if (skillTreeOpen) {
+        if (e.key==='ArrowUp') {
+            let group=Math.floor(skillTreeSelect/3), pos=(skillTreeSelect%3-1+3)%3;
+            skillTreeSelect = group*3+pos;
+        } else if (e.key==='ArrowDown') {
+            let group=Math.floor(skillTreeSelect/3), pos=(skillTreeSelect%3+1)%3;
+            skillTreeSelect = group*3+pos;
+        } else if (e.key==='ArrowLeft') {
+            let group=(Math.floor(skillTreeSelect/3)-1+3)%3, pos=skillTreeSelect%3;
+            skillTreeSelect = group*3+pos;
+        } else if (e.key==='ArrowRight') {
+            let group=(Math.floor(skillTreeSelect/3)+1)%3, pos=skillTreeSelect%3;
+            skillTreeSelect = group*3+pos;
+        } else if (e.key==='z'||e.key==='Z'||e.key==='Enter') {
+            learnSkill(SKILL_LIST[skillTreeSelect]);
+        } else if (e.key==='k'||e.key==='K'||e.key==='Escape') {
+            skillTreeOpen = false;
+            grantMenuCloseGrace();
+        }
+        e.preventDefault();
+        return;
+    }
+
+    if (skillMenuOpen) {
+        let list = player.learnedSkills||[];
+        if (list.length===0) { skillMenuOpen=false; grantMenuCloseGrace(); e.preventDefault(); return; }
+        if (e.key==='ArrowUp') { skillMenuSelect=(skillMenuSelect-1+list.length)%list.length; }
+        else if (e.key==='ArrowDown') { skillMenuSelect=(skillMenuSelect+1)%list.length; }
+        else if (e.key==='z'||e.key==='Z'||e.key==='Enter') {
+            useSkill(list[skillMenuSelect]);
+        } else if (e.key==='a'||e.key==='A'||e.key==='Escape') {
+            skillMenuOpen = false;
+            grantMenuCloseGrace();
         }
         e.preventDefault();
         return;
     }
 
     let nx=player.x, ny=player.y;
-    const turnKeys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','z','Z','a','A','x','X','c','C'];
+    const turnKeys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','z','Z','x','X','c','C'];
     if (turnKeys.includes(e.key)) {
-        tickPlayerPoison();
+        playerTurnTick();
         if (gameOver) { e.preventDefault(); return; }
     }
     if (e.key==='ArrowUp') ny--;
@@ -2225,15 +2588,16 @@ document.addEventListener('keydown', e => {
         else showMessage('근처에 몬스터가 없어요!');
         e.preventDefault(); return;
     } else if (e.key==='a'||e.key==='A') {
-        let target=monsters.find(m=>Math.abs(m.x-player.x)<=1&&Math.abs(m.y-player.y)<=1);
-        if (!target) { showMessage('근처에 몬스터가 없어요!'); }
-        else if ((player.skillGauge||0) < 100) { showMessage(`⚡ 스킬 게이지 부족! (${player.skillGauge||0}/100)`); }
-        else {
-            player.skillGauge = 0;
-            let skillMult = Math.min(3.2, 2.2 + player.level*0.05);
-            showMessage(`💥 강타! ${target.name}에게 강력한 일격!`);
-            battle(target, skillMult);
+        if (!player.learnedSkills || player.learnedSkills.length===0) {
+            showMessage(player.level < 3 ? '⚡ Lv3부터 스킬을 배울 수 있어요! (K:스킬트리)' : '⚡ 배운 스킬이 없어요! K로 스킬트리를 열어보세요');
+        } else {
+            skillMenuOpen = true;
+            skillMenuSelect = 0;
         }
+        e.preventDefault(); return;
+    } else if (e.key==='k'||e.key==='K') {
+        skillTreeOpen = true;
+        skillTreeSelect = 0;
         e.preventDefault(); return;
     } else if (e.key==='x'||e.key==='X') {
         defending=true;
@@ -2347,7 +2711,8 @@ document.addEventListener('keydown', e => {
 
 function gameLoop() {
     if (gameStarted) {
-        // 몬스터 리스폰
+        // 몬스터 리스폰 (메뉴가 열려있는 동안은 정지)
+        if (!anyMenuOpen()) {
         respawnTimer++;
         if (respawnTimer >= RESPAWN_INTERVAL) {
             respawnTimer = 0;
@@ -2385,11 +2750,12 @@ function gameLoop() {
                 }
             }
         }
+        }
         // 몬스터 이동 (플레이어를 향해 다가오거나 근처를 배회)
         monsterMoveTimer++;
         if (monsterMoveTimer >= MONSTER_MOVE_INTERVAL) {
             monsterMoveTimer = 0;
-            if (!invOpen && !shopOpen && floorTransition===0 && !gameOver && !gameClear) {
+            if (!anyMenuOpen() && floorTransition===0 && !gameOver && !gameClear) {
                 updateMonsterAI();
             }
         }
