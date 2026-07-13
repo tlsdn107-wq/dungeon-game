@@ -47,16 +47,16 @@
         #touch-controls {
             width: 100%;
             max-width: 480px;
-            margin-top: 26px;
+            margin-top: 12px;
             display: none;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             user-select: none;
             -webkit-user-select: none;
         }
         #tap-hint {
-            font-size: 11px;
+            font-size: 10px;
             color: #888;
             text-align: center;
         }
@@ -65,13 +65,13 @@
             flex-wrap: wrap;
             justify-content: center;
             align-items: center;
-            gap: 18px;
-            row-gap: 14px;
+            gap: 14px;
+            row-gap: 10px;
         }
         #dpad {
             display: grid;
-            grid-template-columns: 46px 46px 46px;
-            grid-template-rows: 46px 46px 46px;
+            grid-template-columns: 44px 44px 44px;
+            grid-template-rows: 44px 44px 44px;
             gap: 3px;
             flex-shrink: 0;
         }
@@ -79,7 +79,7 @@
         #dpad .left { grid-column: 1; grid-row: 2; }
         #dpad .right { grid-column: 3; grid-row: 2; }
         #dpad .down { grid-column: 2; grid-row: 3; }
-        #dpad .tc-btn { font-size: 19px; }
+        #dpad .tc-btn { font-size: 18px; }
         .tc-btn {
             touch-action: none;
             border: 1px solid #555;
@@ -96,13 +96,14 @@
         }
         .tc-btn:active { background: #444; }
         #action-buttons {
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 62px 62px;
+            grid-template-rows: 42px 42px;
             gap: 6px;
         }
         #action-buttons .tc-btn {
-            width: 68px;
-            height: 46px;
+            width: 62px;
+            height: 42px;
         }
         .tc-btn.atk { background: #5a1f1f; border-color: #a33; }
         .tc-btn.skill { background: #1f3a5a; border-color: #4ac8ff; }
@@ -110,12 +111,12 @@
         .tc-btn.pot { background: #1f5a2c; border-color: #3a9; }
         #menu-buttons {
             display: flex;
-            gap: 8px;
+            gap: 7px;
         }
         #menu-buttons .tc-btn {
-            width: 44px;
-            height: 40px;
-            font-size: 10px;
+            width: 40px;
+            height: 38px;
+            font-size: 9.5px;
         }
         #game {
             position: absolute;
@@ -1932,8 +1933,8 @@ function fitToScreen() {
     const contentWidth = 480;
     const contentHeight = gameStarted ? 480 : 900;
 
-    const usedV = (headerEl ? headerEl.offsetHeight + 12 : 30) +
-                  (gameStarted ? controlsEl.offsetHeight + 26 : 0) + 12;
+    const usedV = (headerEl ? headerEl.offsetHeight + 8 : 26) +
+                  (gameStarted ? controlsEl.offsetHeight + 14 : 0) + 8;
 
     const availWidth = window.innerWidth - 12;
     const availHeight = window.innerHeight - usedV;
