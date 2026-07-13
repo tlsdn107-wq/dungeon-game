@@ -105,6 +105,7 @@
             height: 46px;
         }
         .tc-btn.atk { background: #5a1f1f; border-color: #a33; }
+        .tc-btn.skill { background: #1f3a5a; border-color: #4ac8ff; }
         .tc-btn.def { background: #1f3a5a; border-color: #369; }
         .tc-btn.pot { background: #1f5a2c; border-color: #3a9; }
         #menu-buttons {
@@ -525,6 +526,7 @@
             </div>
             <div id="action-buttons">
                 <button class="tc-btn atk" data-key="z">Z 공격</button>
+                <button class="tc-btn skill" data-key="a">A 필살기</button>
                 <button class="tc-btn def" data-key="x">X 방어</button>
                 <button class="tc-btn pot" data-key="c">C 물약</button>
             </div>
@@ -547,7 +549,7 @@ const ROWS = 15;
 const WALL = 0;
 const FLOOR = 1;
 
-function generateDungeon() {
+function generateDungeonOnce() {
     let newMap = [];
     for (let r = 0; r < ROWS; r++) newMap.push(new Array(COLS).fill(WALL));
     let rooms = [];
@@ -575,6 +577,18 @@ function generateDungeon() {
     return {map:newMap, rooms};
 }
 
+function generateDungeon() {
+    // 방이 너무 적게 생성되면(운 나쁘면 방 1~2개) 몬스터가 거의 안 뜨고 계단도 못 여는
+    // 상황이 생길 수 있어서, 방이 최소 4개 이상 나올 때까지 다시 생성한다.
+    let best = null;
+    for (let attempt = 0; attempt < 25; attempt++) {
+        let result = generateDungeonOnce();
+        if (result.rooms.length >= 4) return result;
+        if (!best || result.rooms.length > best.rooms.length) best = result;
+    }
+    return best;
+}
+
 let dungeon = generateDungeon();
 let map = dungeon.map;
 let rooms = dungeon.rooms;
@@ -586,7 +600,8 @@ let player = {
     weapons: [{name:"낡은 검", atk:3}],
     equippedIndex: 0,
     armors: [{name:"천 옷", def:2}],
-    equippedArmorIndex: 0
+    equippedArmorIndex: 0,
+    skillGauge: 0
 };
 
 let monsterTypes = [
@@ -649,6 +664,7 @@ let monsters = [];
 let stage = 1;
 let floorMonsterTotal = 0, floorKillCount = 0;
 let clearedFloors = new Set(); // 이미 뚫은 층(일반 게이트 통과 / 보스 처치)은 재방문해도 다시 막히지 않음
+let floorProgress = {}; // 층을 나갔다가 다시 들어올 때 처치 진행도를 되살리기 위한 캐시 (stage -> {killCount, monsterTotal})
 
 function spawnMonsters() {
     monsters = [];
@@ -659,23 +675,30 @@ function spawnMonsters() {
         return;
     }
     let available = monsterTypes.filter(m => stage >= m.minS && stage <= m.maxS);
+    let extra = Math.min(2, Math.floor((stage-1)/6)); // 깊은 층일수록 방마다 몬스터가 조금 더 많이 등장
     for (let i=1; i<rooms.length; i++) {
-        let count = Math.floor(Math.random()*2)+1;
+        let count = Math.floor(Math.random()*2)+1+extra;
         for (let j=0; j<count; j++) {
             let type = available[Math.floor(Math.random()*available.length)];
-            let bonus = (stage-1)*0.12;
+            let hpBonus = (stage-1)*0.20;   // 체력은 더 가파르게 증가 (쉽게 안 죽게)
+            let atkBonus = (stage-1)*0.13;
+            let defBonus = (stage-1)*0.15;
             monsters.push({
                 x: rooms[i].x+Math.floor(Math.random()*rooms[i].w),
                 y: rooms[i].y+Math.floor(Math.random()*rooms[i].h),
                 name:type.name,
-                hp:Math.floor(type.hp*(1+bonus)), maxHp:Math.floor(type.hp*(1+bonus)),
-                atk:Math.floor(type.atk*(1+bonus)), def:Math.floor(type.def*(1+bonus)),
+                hp:Math.floor(type.hp*(1+hpBonus)), maxHp:Math.floor(type.hp*(1+hpBonus)),
+                atk:Math.floor(type.atk*(1+atkBonus)), def:Math.floor(type.def*(1+defBonus)),
                 exp:type.exp, gold:type.gold
             });
         }
     }
     floorMonsterTotal = monsters.length;
     floorKillCount = 0;
+    if (!clearedFloors.has(stage) && floorProgress[stage]) {
+        floorKillCount = floorProgress[stage].killCount;
+        floorMonsterTotal = floorProgress[stage].monsterTotal;
+    }
 }
 spawnMonsters();
 let stairs = null;
@@ -701,14 +724,14 @@ function placeStairs() {
 
 function placeBoss() {
     let lastRoom = rooms[rooms.length-1];
-    let bonus = (stage-1)*0.12;
+    let hpBonus = (stage-1)*0.20, atkBonus = (stage-1)*0.13, defBonus = (stage-1)*0.15;
     let b = bossData[stage];
     monsters.push({
         x: Math.floor(lastRoom.x + lastRoom.w/2),
         y: Math.floor(lastRoom.y + lastRoom.h/2),
         name: b.name,
-        hp: Math.floor(b.hp*(1+bonus)), maxHp: Math.floor(b.hp*(1+bonus)),
-        atk: Math.floor(b.atk*(1+bonus)), def: Math.floor(b.def*(1+bonus)),
+        hp: Math.floor(b.hp*(1+hpBonus)), maxHp: Math.floor(b.hp*(1+hpBonus)),
+        atk: Math.floor(b.atk*(1+atkBonus)), def: Math.floor(b.def*(1+defBonus)),
         exp: 0, gold: 80 + stage*10,
         isBoss: true,
         bossColor: b.color,
@@ -719,8 +742,8 @@ function placeBoss() {
 
 function placeChest() {
     // 매 층마다 반드시 하나의 "보물방"을 만들어 장비를 확정 획득할 수 있게 한다
-    // (시작 방과 계단/보스 방은 제외)
-    if (BOSS_FLOORS.includes(stage) || rooms.length < 3) { chest = null; chestRoomIdx = -1; return; }
+    // (시작 방과 계단/보스 방은 제외) - 단, 매 층 확정 등장은 아니고 약 65% 확률로만 등장
+    if (BOSS_FLOORS.includes(stage) || rooms.length < 3 || Math.random() < 0.35) { chest = null; chestRoomIdx = -1; return; }
     let idx = 1 + Math.floor(Math.random() * (rooms.length - 2));
     chestRoomIdx = idx;
     let room = rooms[idx];
@@ -815,6 +838,7 @@ function applySaveData(data) {
         player.equippedArmorIndex = 0;
     }
     if (player.equippedArmorIndex === undefined || player.equippedArmorIndex === null) player.equippedArmorIndex = 0;
+    if (player.skillGauge === undefined || player.skillGauge === null) player.skillGauge = 0;
     stage = data.stage;
     potions = data.potions;
     clearedFloors = new Set(data.clearedFloors || []);
@@ -869,9 +893,13 @@ let heroName='';
 let invOpen=false, invSelect=0, invCategory='weapon';
 let shopOpen=false, shopSelect=0;
 let respawnTimer = 0;
-const RESPAWN_INTERVAL = 300; // 약 5초마다 리스폰
+const RESPAWN_INTERVAL = 340; // 약 5.5초마다 리스폰
 const GATE_RATIO = 0.85; // 계단이 열리기 위해 처치해야 하는 초기 몬스터 비율
-const GATE_MIN_KILLS = 7; // 방이 적어 몬스터가 적게 뜬 층도 최소 이만큼은 잡아야 함
+
+function gateMinKills(s) {
+    // 층이 깊어질수록 최소 처치 요구량이 점점 늘어남 (최대 16까지)
+    return Math.min(16, 5 + Math.floor((s-1)/2));
+}
 
 // ---- 연출 효과 상태 ----
 let damageTexts = [];      // {x, y, text, color, life}
@@ -917,12 +945,12 @@ function drawRoundedRect(x, y, w, h, r) {
 
 function stairsUnlocked() {
     if (clearedFloors.has(stage)) return true;
-    let need = Math.max(GATE_MIN_KILLS, Math.ceil(floorMonsterTotal * GATE_RATIO));
+    let need = Math.max(gateMinKills(stage), Math.ceil(floorMonsterTotal * GATE_RATIO));
     return floorKillCount >= need;
 }
 
 function gateNeed() {
-    return Math.max(GATE_MIN_KILLS, Math.ceil(floorMonsterTotal * GATE_RATIO));
+    return Math.max(gateMinKills(stage), Math.ceil(floorMonsterTotal * GATE_RATIO));
 }
 
 function showMessage(msg) { message=msg; messageTimer=180; }
@@ -1385,12 +1413,21 @@ function drawHUD() {
         cx.textAlign='left';
         messageTimer--;
     }
+    // 스킬 게이지 바
+    let sg = player.skillGauge||0, sgPct = sg/100;
+    drawRoundedRect(10, cv.height-46, 100, 6, 3);
+    cx.fillStyle='#222'; cx.fill();
+    drawRoundedRect(10, cv.height-46, 100*sgPct, 6, 3);
+    cx.fillStyle = sgPct>=1 ? '#7ee0ff' : '#4a6fa5'; cx.fill();
+    cx.font='9px Arial'; cx.textAlign='left';
+    cx.fillStyle = sgPct>=1 ? '#7ee0ff' : '#888';
+    cx.fillText(sgPct>=1 ? 'A:필살기 준비!' : `SKILL ${sg}/100`, 116, cv.height-41);
     cx.fillStyle='#aaa'; cx.font='11px Arial';
     cx.fillText(`⚔️ ATK ${getTotalAtk()}(${getEquippedWeapon().name})   🛡️ DEF ${getTotalDef()}(${getEquippedArmor().name})   🧪 ${potions}개`,10,cv.height-24);
     cx.fillStyle='#7dcea0'; cx.textAlign='right';
     cx.fillText(`EXP ${player.exp}`,cv.width-10,cv.height-24);
     cx.fillStyle='#888'; cx.textAlign='center'; cx.font='10px Arial';
-    cx.fillText(`Z:공격 X:방어 C:물약 I:인벤토리 V:상점 S:저장 L:불러오기`, cv.width/2, cv.height-6);
+    cx.fillText(`Z:공격 A:필살기 X:방어 C:물약 I:인벤 V:상점 S:저장 L:불러오기`, cv.width/2, cv.height-6);
     cx.textAlign='left';
 
     if (invOpen) drawInventory();
@@ -1559,11 +1596,27 @@ function draw() {
     }
 }
 
-function battle(monster) {
-    let dmg=Math.max(1,getTotalAtk()-monster.def);
+function monsterHitsPlayer(monster) {
+    let monDmg=Math.max(1,monster.atk-getTotalDef());
+    if (defending) monDmg=Math.floor(monDmg/2);
+    player.hp-=monDmg;
+    spawnDamageText(player.x, player.y, `-${monDmg}`, '#ff5252');
+    triggerShake(defending ? 3 : 6);
+    triggerFlash('rgba(255,0,0,0.22)');
+    if (player.hp<=0) { player.hp=0; gameOver=true; }
+    else showMessage(`💥 ${monster.name}의 공격! ${monDmg} 데미지!`);
+    defending=false;
+}
+
+function battle(monster, dmgMultiplier) {
+    dmgMultiplier = dmgMultiplier || 1;
+    let dmg=Math.max(1,Math.floor(getTotalAtk()*dmgMultiplier)-monster.def);
     monster.hp-=dmg;
-    spawnDamageText(monster.x, monster.y, `-${dmg}`, '#fff176');
-    triggerFlash('rgba(255,255,255,0.10)');
+    let isSkill = dmgMultiplier > 1;
+    spawnDamageText(monster.x, monster.y, isSkill ? `💥-${dmg}` : `-${dmg}`, isSkill ? '#7ee0ff' : '#fff176');
+    triggerFlash(isSkill ? 'rgba(120,220,255,0.18)' : 'rgba(255,255,255,0.10)');
+    if (isSkill) triggerShake(5);
+    else player.skillGauge = Math.min(100, (player.skillGauge||0) + 20);
     if (monster.hp<=0) {
         player.exp+=monster.exp;
         player.gold+=monster.gold;
@@ -1583,8 +1636,8 @@ function battle(monster) {
         showMessage(`✨ ${monster.name} 처치! +${monster.exp}EXP +${monster.gold}G`);
         checkLevelUp();
         floorKillCount++;
-        // 장비 드랍 (15% 확률로 무기 또는 방어구 중 하나)
-        if (Math.random() < 0.15) {
+        // 장비 드랍 (5% 확률로 무기 또는 방어구 중 하나)
+        if (Math.random() < 0.05) {
             if (Math.random() < 0.5) {
                 let pool = weaponTypes.filter(w => stage >= w.minS && stage <= w.maxS);
                 if (pool.length > 0) addWeapon(pool[Math.floor(Math.random()*pool.length)], '⚔️ 몬스터가 무기를 떨어뜨렸다!');
@@ -1594,16 +1647,42 @@ function battle(monster) {
             }
         }
     } else {
-        let monDmg=Math.max(1,monster.atk-getTotalDef());
-        if (defending) monDmg=Math.floor(monDmg/2);
-        player.hp-=monDmg;
-        spawnDamageText(player.x, player.y, `-${monDmg}`, '#ff5252');
-        triggerShake(defending ? 3 : 6);
-        triggerFlash('rgba(255,0,0,0.22)');
-        if (player.hp<=0) { player.hp=0; gameOver=true; }
-        else showMessage(`💥 ${monster.name}의 반격! ${monDmg} 데미지!`);
-        defending=false;
+        monsterHitsPlayer(monster);
     }
+}
+
+const MONSTER_CHASE_RADIUS = 6;
+let monsterMoveTimer = 0;
+const MONSTER_MOVE_INTERVAL = 26;
+
+function updateMonsterAI() {
+    monsters.forEach(m => {
+        let dx = player.x - m.x, dy = player.y - m.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        let nx = m.x, ny = m.y;
+        let willMove = false;
+        if (dist > 0 && dist <= MONSTER_CHASE_RADIUS) {
+            // 플레이어 방향으로 한 칸 다가감 (더 크게 벌어진 축을 우선 이동)
+            if (Math.abs(dx) > Math.abs(dy)) nx += Math.sign(dx);
+            else if (dy !== 0) ny += Math.sign(dy);
+            else nx += Math.sign(dx);
+            willMove = true;
+        } else if (Math.random() < 0.35) {
+            // 사정거리 밖이면 가끔 제자리 배회
+            const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+            let d = dirs[Math.floor(Math.random()*dirs.length)];
+            nx += d[0]; ny += d[1];
+            willMove = true;
+        }
+        if (!willMove) return;
+        if (nx === player.x && ny === player.y) {
+            monsterHitsPlayer(m);
+            return;
+        }
+        if (map[ny] && map[ny][nx] === FLOOR && !monsters.some(o => o!==m && o.x===nx && o.y===ny)) {
+            m.x = nx; m.y = ny;
+        }
+    });
 }
 
 // 시작화면에 실제 게임 속 용사 스프라이트를 크게 렌더링
@@ -1848,6 +1927,16 @@ document.addEventListener('keydown', e => {
         if (target) battle(target);
         else showMessage('근처에 몬스터가 없어요!');
         e.preventDefault(); return;
+    } else if (e.key==='a'||e.key==='A') {
+        let target=monsters.find(m=>Math.abs(m.x-player.x)<=1&&Math.abs(m.y-player.y)<=1);
+        if (!target) { showMessage('근처에 몬스터가 없어요!'); }
+        else if ((player.skillGauge||0) < 100) { showMessage(`⚡ 스킬 게이지 부족! (${player.skillGauge||0}/100)`); }
+        else {
+            player.skillGauge = 0;
+            showMessage(`💥 강타! ${target.name}에게 강력한 일격!`);
+            battle(target, 2.2);
+        }
+        e.preventDefault(); return;
     } else if (e.key==='x'||e.key==='X') {
         defending=true;
         showMessage('🛡️ 방어 자세! 다음 공격 데미지 반감!');
@@ -1892,14 +1981,14 @@ document.addEventListener('keydown', e => {
                 if (Math.random() < 0.5) {
                     let pool = weaponTypes.filter(w => stage >= w.minS && stage <= w.maxS);
                     if (pool.length > 0) {
-                        let best = pool.reduce((a,b) => (b.atk > a.atk ? b : a), pool[0]);
-                        addWeapon(best, '📦 보물상자에서');
+                        let picked = pool[Math.floor(Math.random()*pool.length)];
+                        addWeapon(picked, '📦 보물상자에서');
                     }
                 } else {
                     let pool = armorTypes.filter(a => stage >= a.minS && stage <= a.maxS);
                     if (pool.length > 0) {
-                        let best = pool.reduce((a,b) => (b.def > a.def ? b : a), pool[0]);
-                        addArmor(best, '📦 보물상자에서');
+                        let picked = pool[Math.floor(Math.random()*pool.length)];
+                        addArmor(picked, '📦 보물상자에서');
                     }
                 }
             }
@@ -1911,6 +2000,7 @@ document.addEventListener('keydown', e => {
                 showMessage(`🔒 계단이 잠겨 있다! 몬스터 처치 ${floorKillCount}/${need}`);
             } else {
             startFloorTransition(() => {
+                floorProgress[stage] = {killCount: floorKillCount, monsterTotal: floorMonsterTotal};
                 clearedFloors.add(stage);
                 stage++;
                 dungeon = generateDungeon();
@@ -1935,6 +2025,7 @@ document.addEventListener('keydown', e => {
             }
         } else if (upstairs && player.x===upstairs.x && player.y===upstairs.y) {
             startFloorTransition(() => {
+                floorProgress[stage] = {killCount: floorKillCount, monsterTotal: floorMonsterTotal};
                 stage--;
                 dungeon = generateDungeon();
                 map = dungeon.map;
@@ -1961,22 +2052,44 @@ function gameLoop() {
             respawnTimer = 0;
             // 현재 스테이지 몬스터 최대 개수
             let maxMonsters = rooms.length * 2;
-            if (monsters.length < maxMonsters / 2 && !BOSS_FLOORS.includes(stage)) {
+            if (monsters.length < maxMonsters / 2 && !BOSS_FLOORS.includes(stage) && rooms.length > 1) {
                 // 몬스터가 절반 이하면 리스폰 (보스층 제외)
+                // 첫 방(시작 지점)과 마지막 방(계단/보스 위치)은 제외해서 통로가 몬스터로 막히지 않게 함
                 let available = monsterTypes.filter(m => stage >= m.minS && stage <= m.maxS);
-                let randomRoom = rooms[Math.floor(Math.random()*rooms.length)+1] || rooms[1];
                 let type = available[Math.floor(Math.random()*available.length)];
-                let bonus = (stage-1)*0.12;
-                monsters.push({
-                    x: randomRoom.x+Math.floor(Math.random()*randomRoom.w),
-                    y: randomRoom.y+Math.floor(Math.random()*randomRoom.h),
-                    name: type.name,
-                    hp: Math.floor(type.hp*(1+bonus)),
-                    maxHp: Math.floor(type.hp*(1+bonus)),
-                    atk: Math.floor(type.atk*(1+bonus)),
-                    def: Math.floor(type.def*(1+bonus)),
-                    exp: type.exp, gold: type.gold
-                });
+                let hpBonus = (stage-1)*0.20, atkBonus = (stage-1)*0.13, defBonus = (stage-1)*0.15;
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    let roomIdx = 1 + Math.floor(Math.random()*(rooms.length-2));
+                    let randomRoom = rooms[roomIdx];
+                    let rx = randomRoom.x+Math.floor(Math.random()*randomRoom.w);
+                    let ry = randomRoom.y+Math.floor(Math.random()*randomRoom.h);
+                    let blocked = (player.x===rx && player.y===ry) ||
+                        (stairs && stairs.x===rx && stairs.y===ry) ||
+                        (upstairs && upstairs.x===rx && upstairs.y===ry) ||
+                        (chest && chest.x===rx && chest.y===ry) ||
+                        (shop && shop.x===rx && shop.y===ry) ||
+                        monsters.some(m => m.x===rx && m.y===ry);
+                    if (!blocked) {
+                        monsters.push({
+                            x: rx, y: ry,
+                            name: type.name,
+                            hp: Math.floor(type.hp*(1+hpBonus)),
+                            maxHp: Math.floor(type.hp*(1+hpBonus)),
+                            atk: Math.floor(type.atk*(1+atkBonus)),
+                            def: Math.floor(type.def*(1+defBonus)),
+                            exp: type.exp, gold: type.gold
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        // 몬스터 이동 (플레이어를 향해 다가오거나 근처를 배회)
+        monsterMoveTimer++;
+        if (monsterMoveTimer >= MONSTER_MOVE_INTERVAL) {
+            monsterMoveTimer = 0;
+            if (!invOpen && !shopOpen && floorTransition===0 && !gameOver && !gameClear) {
+                updateMonsterAI();
             }
         }
         draw();
