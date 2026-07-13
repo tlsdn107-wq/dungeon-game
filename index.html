@@ -909,6 +909,7 @@ function gateMinKills(s) {
 
 // ---- 연출 효과 상태 ----
 let damageTexts = [];      // {x, y, text, color, life}
+let impactEffects = [];    // {x, y, life, maxLife, color, type: 'ring'|'slash'|'spark'}
 let shakeFrames = 0, shakeMag = 0;
 let flashFrames = 0, flashColor = 'rgba(255,0,0,0.3)';
 const TRANSITION_FRAMES = 26;
@@ -917,6 +918,20 @@ let pendingFloorChange = null;
 
 function spawnDamageText(tileX, tileY, text, color) {
     damageTexts.push({ x: tileX*TILE+16, y: tileY*TILE+10, text, color, life: 42 });
+}
+function spawnImpactRing(tileX, tileY, color, maxRadius, life) {
+    impactEffects.push({ x: tileX*TILE+16, y: tileY*TILE+16, life: life||18, maxLife: life||18, color, maxRadius: maxRadius||30, type:'ring' });
+}
+function spawnSlash(tileX, tileY, color, angle) {
+    impactEffects.push({ x: tileX*TILE+16, y: tileY*TILE+16, life:13, maxLife:13, color, type:'slash', angle: angle });
+}
+function spawnBurst(tileX, tileY, color, count) {
+    for (let i=0;i<(count||10);i++) {
+        let ang = Math.random()*Math.PI*2;
+        let speed = 1.2+Math.random()*2.4;
+        impactEffects.push({ x: tileX*TILE+16, y: tileY*TILE+16, life:20, maxLife:20, color, type:'spark',
+            vx:Math.cos(ang)*speed, vy:Math.sin(ang)*speed });
+    }
 }
 function triggerShake(mag) { shakeFrames = 14; shakeMag = mag; }
 function triggerFlash(color) { flashFrames = 10; flashColor = color; }
@@ -927,6 +942,11 @@ function startFloorTransition(callback) {
 function updateEffects() {
     damageTexts.forEach(d => { d.life--; d.y -= 0.55; });
     damageTexts = damageTexts.filter(d => d.life > 0);
+    impactEffects.forEach(fx => {
+        fx.life--;
+        if (fx.type==='spark') { fx.x += fx.vx; fx.y += fx.vy; fx.vx *= 0.94; fx.vy *= 0.94; }
+    });
+    impactEffects = impactEffects.filter(fx => fx.life > 0);
     if (shakeFrames > 0) shakeFrames--;
     if (flashFrames > 0) flashFrames--;
     if (floorTransition > 0) {
@@ -936,6 +956,32 @@ function updateEffects() {
             pendingFloorChange = null;
         }
     }
+}
+function drawImpactEffects() {
+    impactEffects.forEach(fx => {
+        let t = fx.life / fx.maxLife;
+        cx.globalAlpha = Math.max(0, t);
+        if (fx.type === 'ring') {
+            let r = fx.maxRadius * (1 - t) + 4;
+            cx.strokeStyle = fx.color;
+            cx.lineWidth = 3;
+            cx.beginPath(); cx.arc(fx.x, fx.y, r, 0, Math.PI*2); cx.stroke();
+        } else if (fx.type === 'slash') {
+            cx.strokeStyle = fx.color;
+            cx.lineWidth = 4;
+            cx.lineCap = 'round';
+            let len = 22;
+            let dx = Math.cos(fx.angle)*len, dy = Math.sin(fx.angle)*len;
+            cx.beginPath();
+            cx.moveTo(fx.x - dx, fx.y - dy);
+            cx.lineTo(fx.x + dx, fx.y + dy);
+            cx.stroke();
+        } else if (fx.type === 'spark') {
+            cx.fillStyle = fx.color;
+            cx.beginPath(); cx.arc(fx.x, fx.y, 2, 0, Math.PI*2); cx.fill();
+        }
+    });
+    cx.globalAlpha = 1;
 }
 function drawRoundedRect(x, y, w, h, r) {
     if (w <= 0) return;
@@ -1000,6 +1046,7 @@ function sfx(name) {
         case 'gameover': [280,230,180,130].forEach((f,i)=>setTimeout(()=>playTone(f,0.3,'sawtooth',0.15),i*180)); break;
         case 'victory': [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>playTone(f,0.2,'triangle',0.18),i*120)); break;
         case 'menu': playTone(380, 0.05, 'square', 0.07); break;
+        case 'charge': playTone(160, 0.4, 'sawtooth', 0.15, 480); break;
     }
 }
 
@@ -1354,6 +1401,93 @@ function drawMonsterShape(ctx, name, mx, my, isBoss, bossColor, glowColor) {
         ctx.fillStyle='#8b0000'; ctx.fillRect(mx+24,my+16,12,3);
         ctx.fillStyle='#cc0000'; ctx.beginPath(); ctx.moveTo(mx+28,my+8); ctx.lineTo(mx+32,my+8); ctx.lineTo(mx+30,my+2); ctx.fill();
         ctx.fillStyle='#1a1a1a'; ctx.fillRect(mx+7,my+28,7,9); ctx.fillRect(mx+18,my+28,7,9);
+    } else if (name==="고블린왕") {
+        let bc = bossColor, gc = glowColor;
+        let dark = shade(bc,0.35), mid = shade(bc,0.6);
+        let glow = `rgb(${gc[0]},${gc[1]},${gc[2]})`;
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.18)`; ctx.beginPath(); ctx.arc(mx+16,my+16,26,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=mid; ctx.fillRect(mx+2,my+16,28,18);
+        ctx.fillStyle=dark; ctx.fillRect(mx+2,my+30,28,4);
+        ctx.fillStyle=dark; ctx.fillRect(mx-4,my+16,8,16); ctx.fillRect(mx+28,my+16,8,16);
+        ctx.fillStyle=mid; ctx.beginPath(); ctx.arc(mx+16,my+8,10,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark;
+        ctx.beginPath(); ctx.moveTo(mx+6,my+6); ctx.lineTo(mx-2,my); ctx.lineTo(mx+8,my+2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+26,my+6); ctx.lineTo(mx+34,my); ctx.lineTo(mx+24,my+2); ctx.fill();
+        ctx.fillStyle=glow;
+        ctx.beginPath(); ctx.moveTo(mx+6,my); ctx.lineTo(mx+9,my-8); ctx.lineTo(mx+12,my); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+13,my-1); ctx.lineTo(mx+16,my-10); ctx.lineTo(mx+19,my-1); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+20,my); ctx.lineTo(mx+23,my-8); ctx.lineTo(mx+26,my); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx+6,my-1,20,3);
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx+12,my+8,1.6,0,Math.PI*2); ctx.arc(mx+20,my+8,1.6,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='white'; ctx.fillRect(mx+13,my+12,2,2); ctx.fillRect(mx+17,my+12,2,2);
+        ctx.fillStyle='#5a3a1a'; ctx.fillRect(mx+30,my+8,4,20);
+        ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(mx+32,my+6,7,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=mid; ctx.beginPath(); ctx.arc(mx+29,my+3,2,0,Math.PI*2); ctx.arc(mx+35,my+3,2,0,Math.PI*2); ctx.arc(mx+32,my-1,2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx+4,my+34,9,8); ctx.fillRect(mx+19,my+34,9,8);
+    } else if (name==="서리거인") {
+        let bc = bossColor, gc = glowColor;
+        let dark = shade(bc,0.35), mid = shade(bc,0.6), light = shade(bc,0.95);
+        let glow = `rgb(${gc[0]},${gc[1]},${gc[2]})`;
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.2)`; ctx.beginPath(); ctx.arc(mx+16,my+18,28,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=mid; ctx.fillRect(mx-2,my+14,36,22);
+        ctx.fillStyle=light; ctx.fillRect(mx+6,my+16,20,4);
+        ctx.fillStyle=light;
+        ctx.beginPath(); ctx.moveTo(mx-2,my+14); ctx.lineTo(mx-8,my+6); ctx.lineTo(mx+2,my+12); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+34,my+14); ctx.lineTo(mx+40,my+6); ctx.lineTo(mx+30,my+12); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx-6,my+18,8,18); ctx.fillRect(mx+34,my+18,8,18);
+        ctx.fillStyle=mid; ctx.beginPath(); ctx.arc(mx+16,my+6,11,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=light;
+        ctx.beginPath(); ctx.moveTo(mx+8,my+12); ctx.lineTo(mx+10,my+22); ctx.lineTo(mx+13,my+12); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+16,my+13); ctx.lineTo(mx+16,my+24); ctx.lineTo(mx+19,my+13); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+21,my+12); ctx.lineTo(mx+23,my+22); ctx.lineTo(mx+25,my+12); ctx.fill();
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx+11,my+5,2,0,Math.PI*2); ctx.arc(mx+21,my+5,2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.5)`; ctx.beginPath(); ctx.arc(mx+11,my+5,5,0,Math.PI*2); ctx.arc(mx+21,my+5,5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=light;
+        ctx.beginPath(); ctx.moveTo(mx+7,my-3); ctx.lineTo(mx+4,my-12); ctx.lineTo(mx+11,my-4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+25,my-3); ctx.lineTo(mx+28,my-12); ctx.lineTo(mx+21,my-4); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx+4,my+36,10,8); ctx.fillRect(mx+18,my+36,10,8);
+    } else if (name==="화염군주") {
+        let bc = bossColor, gc = glowColor;
+        let dark = shade(bc,0.35), mid = shade(bc,0.6);
+        let glow = `rgb(${gc[0]},${gc[1]},${gc[2]})`;
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.22)`; ctx.beginPath(); ctx.arc(mx+16,my+16,27,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark;
+        ctx.beginPath(); ctx.moveTo(mx+8,my+14); ctx.lineTo(mx-4,my+40); ctx.lineTo(mx+36,my+40); ctx.lineTo(mx+24,my+14); ctx.fill();
+        ctx.fillStyle=mid; ctx.fillRect(mx+9,my+16,14,16);
+        ctx.fillStyle=dark; ctx.fillRect(mx-6,my+16,8,16); ctx.fillRect(mx+30,my+16,8,16);
+        ctx.fillStyle=mid; ctx.beginPath(); ctx.arc(mx+16,my+8,9,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=glow;
+        ctx.beginPath(); ctx.moveTo(mx+6,my+2); ctx.lineTo(mx+9,my-10); ctx.lineTo(mx+12,my+1); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+13,my); ctx.lineTo(mx+16,my-13); ctx.lineTo(mx+19,my); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+20,my+1); ctx.lineTo(mx+23,my-10); ctx.lineTo(mx+26,my+2); ctx.fill();
+        ctx.fillStyle='#ffde8a';
+        ctx.beginPath(); ctx.moveTo(mx+14,my-1); ctx.lineTo(mx+16,my-8); ctx.lineTo(mx+18,my-1); ctx.fill();
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx+12,my+8,2,0,Math.PI*2); ctx.arc(mx+20,my+8,2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#3a1a0a'; ctx.fillRect(mx+30,my+4,3,26);
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx+31,my+2,5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#ffde8a'; ctx.beginPath(); ctx.arc(mx+31,my+2,2.5,0,Math.PI*2); ctx.fill();
+    } else if (name==="마왕") {
+        let bc = bossColor, gc = glowColor;
+        let dark = shade(bc,0.35), mid = shade(bc,0.6);
+        let glow = `rgb(${gc[0]},${gc[1]},${gc[2]})`;
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.25)`; ctx.beginPath(); ctx.arc(mx+16,my+16,30,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark;
+        ctx.beginPath(); ctx.moveTo(mx+4,my+14); ctx.lineTo(mx-16,my+2); ctx.lineTo(mx-10,my+18); ctx.lineTo(mx-18,my+22); ctx.lineTo(mx+2,my+26); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+28,my+14); ctx.lineTo(mx+48,my+2); ctx.lineTo(mx+42,my+18); ctx.lineTo(mx+50,my+22); ctx.lineTo(mx+30,my+26); ctx.fill();
+        ctx.fillStyle=mid; ctx.fillRect(mx+4,my+14,24,20);
+        ctx.fillStyle=dark; ctx.fillRect(mx+4,my+28,24,6);
+        ctx.fillStyle=mid; ctx.beginPath(); ctx.arc(mx+16,my+8,9,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark;
+        ctx.beginPath(); ctx.moveTo(mx+7,my+3); ctx.lineTo(mx+2,my-10); ctx.lineTo(mx+11,my); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+25,my+3); ctx.lineTo(mx+30,my-10); ctx.lineTo(mx+21,my); ctx.fill();
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mx+11,my+8,2.4,0,Math.PI*2); ctx.arc(mx+21,my+8,2.4,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=`rgba(${gc[0]},${gc[1]},${gc[2]},0.5)`; ctx.beginPath(); ctx.arc(mx+11,my+8,6,0,Math.PI*2); ctx.arc(mx+21,my+8,6,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx+11,my+13,10,3);
+        ctx.fillStyle='white';
+        ctx.beginPath(); ctx.moveTo(mx+12,my+13); ctx.lineTo(mx+13,my+16); ctx.lineTo(mx+14,my+13); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(mx+18,my+13); ctx.lineTo(mx+19,my+16); ctx.lineTo(mx+20,my+13); ctx.fill();
+        ctx.fillStyle=dark; ctx.fillRect(mx-2,my+16,7,16); ctx.fillRect(mx+27,my+16,7,16);
+        ctx.beginPath(); ctx.moveTo(mx+16,my+34); ctx.lineTo(mx+22,my+44); ctx.lineTo(mx+18,my+40); ctx.lineTo(mx+14,my+44); ctx.fill();
     } else if (isBoss) {
         let bc = bossColor, gc = glowColor;
         let dark = shade(bc,0.35), mid = shade(bc,0.6), light = shade(bc,0.95);
@@ -1655,6 +1789,7 @@ function draw() {
     monsters.forEach(m=>drawMonster(m));
     drawPlayer();
     drawDamageTexts();
+    drawImpactEffects();
     cx.restore();
 
     if (flashFrames > 0) {
@@ -1696,14 +1831,36 @@ function tickPlayerPoison() {
 }
 
 function monsterHitsPlayer(monster) {
+    let heavy = false;
+    if (monster.isBoss) {
+        if (monster.charging) {
+            heavy = true;
+            monster.charging = false;
+        } else if (Math.random() < 0.28) {
+            // 강공격 예고 (이번 턴엔 공격하지 않고 힘을 모으는 연출만)
+            monster.charging = true;
+            showMessage(`⚠️ ${monster.name}이(가) 힘을 모은다...!`);
+            spawnImpactRing(monster.x, monster.y, '#ff6a00', 26, 26);
+            spawnImpactRing(monster.x, monster.y, '#ffcf5c', 18, 22);
+            triggerFlash('rgba(255,100,0,0.14)');
+            sfx('charge');
+            return;
+        }
+    }
     let monDmg=Math.max(1,monster.atk-getTotalDef());
-    let heavy = monster.isBoss && Math.random() < 0.3;
-    if (heavy) monDmg = Math.floor(monDmg*1.8);
+    if (heavy) monDmg = Math.floor(monDmg*2.1);
     if (defending) monDmg=Math.floor(monDmg/2);
     player.hp-=monDmg;
     spawnDamageText(player.x, player.y, heavy ? `💢-${monDmg}` : `-${monDmg}`, heavy ? '#ff9d3a' : '#ff5252');
-    triggerShake(defending ? 3 : (heavy ? 9 : 6));
-    triggerFlash(heavy ? 'rgba(255,120,0,0.32)' : 'rgba(255,0,0,0.22)');
+    triggerShake(defending ? 3 : (heavy ? 12 : 6));
+    triggerFlash(heavy ? 'rgba(255,80,0,0.4)' : 'rgba(255,0,0,0.22)');
+    if (heavy) {
+        // 강공격 작렬: 큰 링 + 십자 베기 + 스파크 폭발
+        spawnImpactRing(player.x, player.y, '#ff6a00', 40, 20);
+        spawnSlash(player.x, player.y, '#ff8a3a', 0);
+        spawnSlash(player.x, player.y, '#ffcf5c', Math.PI/2);
+        spawnBurst(player.x, player.y, '#ffae42', 18);
+    }
     let poisoned = false;
     if (!monster.isBoss && POISON_MONSTERS.includes(monster.name) && Math.random() < 0.3) {
         player.poisonTurns = 3;
@@ -1711,7 +1868,7 @@ function monsterHitsPlayer(monster) {
         poisoned = true;
     }
     if (player.hp<=0) { player.hp=0; gameOver=true; sfx('gameover'); }
-    else if (heavy) showMessage(`💢 ${monster.name}의 강공격! ${monDmg} 데미지!`);
+    else if (heavy) showMessage(`💢 ${monster.name}의 강공격 작렬! ${monDmg} 데미지!`);
     else if (poisoned) showMessage(`🐍 ${monster.name}의 공격에 중독됐다! (${monDmg} 데미지)`);
     else showMessage(`💥 ${monster.name}의 공격! ${monDmg} 데미지!`);
     sfx('hurt');
@@ -1729,9 +1886,20 @@ function battle(monster, dmgMultiplier) {
     let dmgColor = isSkill ? '#7ee0ff' : (isCrit ? '#ff8a3a' : '#fff176');
     spawnDamageText(monster.x, monster.y, dmgText, dmgColor);
     triggerFlash(isSkill ? 'rgba(120,220,255,0.18)' : (isCrit ? 'rgba(255,160,60,0.18)' : 'rgba(255,255,255,0.10)'));
-    if (isSkill || isCrit) triggerShake(isSkill ? 5 : 4);
+    if (isSkill || isCrit) triggerShake(isSkill ? 8 : 4);
     if (!isSkill) player.skillGauge = Math.min(100, (player.skillGauge||0) + 20);
     sfx(isSkill ? 'skill' : (isCrit ? 'crit' : 'hit'));
+    if (isSkill) {
+        // 필살기: 화려한 다중 베기 + 확산 링 + 스파크
+        spawnImpactRing(monster.x, monster.y, '#7ee0ff', 34, 22);
+        spawnSlash(monster.x, monster.y, '#bdf3ff', -0.5);
+        spawnSlash(monster.x, monster.y, '#7ee0ff', 0.3);
+        spawnSlash(monster.x, monster.y, '#4ac8ff', 1.1);
+        spawnBurst(monster.x, monster.y, '#7ee0ff', 16);
+    } else if (isCrit) {
+        spawnImpactRing(monster.x, monster.y, '#ff8a3a', 22, 14);
+        spawnBurst(monster.x, monster.y, '#ffb066', 8);
+    }
     if (monster.hp<=0) {
         player.exp+=monster.exp;
         player.gold+=monster.gold;
